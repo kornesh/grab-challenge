@@ -15,6 +15,7 @@ from trainer.slidingwindow.data_utils import timeseries, keras_timeseries_genera
 import argparse
 from tensorflow.python.lib.io import file_io
 import keras.backend as K
+from keras.callbacks import ModelCheckpoint, EarlyStopping
 
 seed(42)
 np.random.seed(42)
@@ -23,7 +24,7 @@ np.random.seed(42)
 tf.logging.set_verbosity(tf.logging.ERROR)
 
 
-def get_data(file_path, split_ratio=0.8):
+def get_data(file_path):
     print("Loading data..", file_path)
     with file_io.FileIO(file_path, mode='rb') as input_f:
         df = pd.read_csv(input_f)
@@ -66,22 +67,18 @@ def get_data(file_path, split_ratio=0.8):
     X = dfx[['dow', 'mins_norm', 'x', 'y', 'z', 'demand']]
     y = dfx[['demand']]
 
-    split_n = int(split_ratio*len(y))
-    train_X = X.iloc[:split_n, :].values
-    train_y = y.iloc[:split_n, :].values
-
-    test_X = X.iloc[split_n:, :].values
-    test_y = y.iloc[split_n:, :].values
-
-    print("Train shape", train_X.shape, train_y.shape)
-    print("Test shape", test_X.shape, test_y.shape)
-
-    return train_X, train_y, test_X, test_y
+    return X, y
 
 #https://stackoverflow.com/questions/43855162/rmse-rmsle-loss-function-in-keras
 #https://github.com/keras-team/keras/issues/10706
 def root_mean_squared_error(y_true, y_pred):
     return K.sqrt(K.mean(K.square(y_pred - y_true)))
+
+# https://www.kaggle.com/asuilin/smape-variants
+# https://www.kaggle.com/c/allstate-claims-severity/discussion/26461
+def sMAPE(y_true, y_pred):
+    #Symmetric mean absolute percentage error
+    return 100 * K.mean(K.abs(y_pred - y_true) / (K.abs(y_pred) + K.abs(y_true)), axis=-1)
 
 def model_fn(past_steps, future_steps, features):
     model = Sequential([
@@ -91,8 +88,8 @@ def model_fn(past_steps, future_steps, features):
         Dropout(0.2),
         Dense(future_steps)
     ])
-    model.compile(loss='mse', optimizer='adam', metrics=[
-                  'mse', 'mape', 'mae', 'cosine'])
+    model.compile(loss=sMAPE, optimizer='adam',
+        metrics=['mse', 'mape', 'mae', 'cosine', root_mean_squared_error, sMAPE])
     model.summary()
     return model
 
@@ -136,7 +133,17 @@ if __name__ == '__main__':
     except:
         pass
 
-    test_X, test_y, train_X, train_y = get_data(args.train_file)
+    X, y = get_data(args.train_file)
+
+    split_n = int(0.8*len(y))
+    train_X = X.iloc[:split_n, :].values
+    train_y = y.iloc[:split_n, :].values
+
+    test_X = X.iloc[split_n:, :].values
+    test_y = y.iloc[split_n:, :].values
+
+    print("Train shape", train_X.shape, train_y.shape)
+    print("Test shape", test_X.shape, test_y.shape)
 
     # Personal note: `steps_per_epoch` is used to generate the *entire dataset* once by calling the generator `steps_per_epoch` times
     # where as `epochs` gives the number of times the model is trained over the *entire dataset*.
@@ -159,10 +166,35 @@ if __name__ == '__main__':
     generator = keras_timeseries_generator(
         train_X, train_y, BATCH_SIZE, past_steps, future_steps)
 
+    val_generator = keras_timeseries_generator(
+        test_X, test_y, BATCH_SIZE, past_steps, future_steps)
+
+    checkpoint_path = "model-epoch{epoch:02d}-val_loss{val_loss:.5f}.h5"
+    if not args.job_dir.startswith('gs://'):
+        checkpoint_path = os.path.join(args.job_dir, checkpoint_path)
+
+    class GCSCheckpoint(ModelCheckpoint):
+        def on_epoch_end(self, epoch, logs=None):
+            super().on_epoch_end(epoch, logs)
+            filepath = self.filepath.format(epoch=epoch + 1, **logs)
+            #print("ModelCheckpoint args", args.job_dir)
+            if args.job_dir.startswith('gs://') and os.path.isfile(filepath):
+                copy_file_to_gcs(args.job_dir, filepath)
+
+    checkpoint = GCSCheckpoint(checkpoint_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
+
+    earlystop = EarlyStopping(monitor='val_loss', patience=50, verbose=1)
+
     tensorboard = TensorBoard(log_dir=os.path.join(
         args.job_dir, "logs/{}".format(time())))
-    history = model.fit_generator(generator, steps_per_epoch=len(
-        train_X) // BATCH_SIZE, epochs=NUM_EPOCHS, verbose=1, callbacks=[tensorboard])
+
+    history = model.fit_generator(generator,
+        steps_per_epoch=len(train_X) // BATCH_SIZE,
+        epochs=NUM_EPOCHS,
+        verbose=1,
+        callbacks=[tensorboard, checkpoint, earlystop],
+        validation_data=val_generator,
+        validation_steps=len(test_X)//BATCH_SIZE)
 
     # model.save_weights('./weights.h5')
 
@@ -175,7 +207,6 @@ if __name__ == '__main__':
 
     evaluate = model.evaluate(test_Xs, test_ys, batch_size=BATCH_SIZE)
     print("Evaluation", evaluate)
-
 
     # Unhappy hack to workaround h5py not being able to write to GCS.
     # Force snapshots and saves to local filesystem, then copy them over to GCS.
