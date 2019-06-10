@@ -140,8 +140,16 @@ gcloud ml-engine local train \
 ## Prediction / evaluation
 ```bash
 # head -n 100000 training.csv > evaluation.csv
-wget -O model.h5 https://storage.googleapis.com/sr-semantic-search/jobs/timeseries_17/model-epoch02-val_loss24.60540.h5
-python -m trainer.slidingwindow.predict --past-steps 100 --batch-size 10000 --model model.h5 --data evaluation.csv
+
+# past-steps = 1000 (Final model)
+wget -O model_past_steps_1000.h5 https://storage.googleapis.com/sr-semantic-search/jobs/timeseries_19/model-epoch01-val_loss30.07487.h5
+python -m trainer.slidingwindow.predict --past-steps 1000 --batch-size 1000 --model model_past_steps_1000.h5 --data evaluation.csv
+
+# past-steps = 10
+wget -O model_past_steps_100.h5 https://storage.googleapis.com/sr-semantic-search/jobs/timeseries_17/model-epoch02-val_loss24.60540.h5
+python -m trainer.slidingwindow.predict --past-steps 100 --batch-size 10000 --model model_past_steps_100.h5 --data evaluation.csv
+
+
 ```
 
 # Model 2: Encoder Decoder with teacher forcing (WIP)
