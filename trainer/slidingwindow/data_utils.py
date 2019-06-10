@@ -1,6 +1,9 @@
 import pandas as pd
 import numpy as np
 from random import seed
+from tensorflow.python.lib.io import file_io
+import geohash
+from math import cos, sin
 
 seed(42)
 np.random.seed(42)
@@ -101,6 +104,50 @@ def timeseries(X, y, past_steps, future_steps):
 
     return (Xs, ys)
 
+def get_data(file_path):
+    print("Loading data..", file_path)
+    with file_io.FileIO(file_path, mode='rb') as input_f:
+        df = pd.read_csv(input_f)
+    df[['h', 'm']] = df['timestamp'].str.split(':', expand=True)
+    df['h'] = df['h'].astype('int64')
+    df['m'] = df['m'].astype('int64')
+    df['mins'] = (df['h'] * 60) + df['m']
+    df['mins_norm'] = df['mins'] / 1440
+    df['dow'] = df['day'] % 7
+
+    # Resolve GeoCodes
+    geohashes_df = df.groupby('geohash6', as_index=False).agg({'day': 'count'}).rename(
+        columns={'day': 'count'}).sort_values(by='count', ascending=False)
+    geohashes_df['lat'] = None
+    geohashes_df['lat_err'] = None
+    geohashes_df['long'] = None
+    geohashes_df['long_err'] = None
+    geohashes_df['x'] = None
+    geohashes_df['y'] = None
+    geohashes_df['z'] = None
+
+    for i in range(len(geohashes_df)):
+        geo_decoded = geohash.decode_exactly(geohashes_df.loc[i, 'geohash6'])
+        geohashes_df.loc[i, 'lat'] = geo_decoded[0]
+        geohashes_df.loc[i, 'long'] = geo_decoded[1]
+        geohashes_df.loc[i, 'lat_err'] = geo_decoded[2]
+        geohashes_df.loc[i, 'long_err'] = geo_decoded[3]
+
+        # https://datascience.stackexchange.com/a/13575
+        geohashes_df.loc[i, 'x'] = cos(
+            geo_decoded[0]) * cos(geo_decoded[1])  # cos(lat) * cos(lon)
+        geohashes_df.loc[i, 'y'] = cos(
+            geo_decoded[0]) * sin(geo_decoded[1])  # cos(lat) * sin(lon)
+        geohashes_df.loc[i, 'z'] = sin(geo_decoded[0])  # sin(lat)
+
+    df = df.merge(geohashes_df.drop(
+        columns=['count']), on='geohash6', how='inner')
+
+    dfx = df.sort_values(by=['day', 'mins', 'geohash6'], ascending=True)
+    X = dfx[['dow', 'mins_norm', 'x', 'y', 'z', 'demand']]
+    y = dfx[['demand']]
+
+    return X, y
 
 if __name__ == "__main__":
     # @TODO(kornesh): Write proper tests!

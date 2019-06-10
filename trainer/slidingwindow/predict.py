@@ -4,8 +4,8 @@ import numpy as np
 import sys
 import argparse
 from keras.models import load_model
-from trainer.slidingwindow.model import get_data, sMAPE, root_mean_squared_error
-from trainer.slidingwindow.data_utils import timeseries
+from trainer.slidingwindow.model import sMAPE, root_mean_squared_error
+from trainer.slidingwindow.data_utils import timeseries, get_data
 import keras.losses
 
 keras.losses.custom_loss = sMAPE
