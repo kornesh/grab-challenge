@@ -82,7 +82,7 @@ def timeseries_generator(X, y, batch_size, past_steps, future_steps):
         yield np.array(Xs), np.array(ys)
 
 
-
+# This is the root cause of OOMs during prediction lol. Use the generator instead
 def timeseries(X, y, past_steps, future_steps):
     Xs = []
     ys = []

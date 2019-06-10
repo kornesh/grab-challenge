@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+import numpy as np
 def prediction_graph(Xs, ys, yhat, i, past_steps, future_steps):
     past = Xs[i][:, -1].reshape(past_steps)[1:]
     for c in Xs[i]:
