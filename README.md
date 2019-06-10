@@ -1,8 +1,10 @@
 # Grab AI Challenge: Traffic Management
 
-Each of the `geohash6` can be considered a separate discontinous time series. Traditional time series method like ARIMA can make good prediction for series specific problems but it doesn't scale well to predict thousands of series as it fails to capture the general patterns among those series.
+Each of the `geohash6` can be considered as a separate discontinous time series. Traditional time series methods like ARIMA can make good predictions on series specific problems but it doesn't scale well to predict thousands of series as it fails to capture the general patterns among those series.
 
 I'll be taking minimalistic approach to feature engineering since I'll be only considering neural networks which are capable of learning features automatically.
+
+Models performance is only one of four criterias that is being considered for [this challenge](https://www.aiforsea.com/traffic-management). Instead of solely focusing on achieving best model performance possible, I am more interested in exploring newer and much more efficient architectures like [WaveNet](https://arxiv.org/abs/1711.10433) and [Neural ODE](https://arxiv.org/abs/1806.07366).
 
 # Model 1: Sliding Window with LSTM (Final solution)
 ```
@@ -34,6 +36,47 @@ The basic idea behind this model is to convert the matrix above to the one below
 [ 30.  35.  65.]
 [ 40.  45.  85.]]   =>   [105. 125. 145.]
 ```
+I added a few additonal features like `mins = (h * 60) + m` and it's normalized version `mins_norm = mins / (60 * 24)`. After extracting latitude and longitude from `geohash6`, we can convert them into [Cartesian coordinates](https://en.wikipedia.org/wiki/Geographic_coordinate_conversion#From_geodetic_to_ECEF_coordinates). It turns out these 2 features actually represent a three dimensional space. Unlike in latitude and longitude, close points in these 3 dimensions are also close in reality. So this standardizes the features nicely.
+```
+        geohash6  day timestamp    demand   h   m  mins  mins_norm  dow      lat     lat_err     long    long_err         x         y         z
+      0   qp02zd    1       0:0  0.022396   0   0     0        0.0    1 -5.47943  0.00274658  90.6866  0.00549316 -0.633821  0.282699  0.719967
+      1   qp02zr    1       0:0  0.042046   0   0     0        0.0    1 -5.45197  0.00274658  90.6757  0.00549316 -0.612472  0.281284  0.738754
+      2   qp02zt    1       0:0  0.001112   0   0     0        0.0    1 -5.46295  0.00274658  90.6866  0.00549316   -0.6229  0.277828  0.731305
+      3   qp02zu    1       0:0  0.001831   0   0     0        0.0    1 -5.46844  0.00274658  90.6976  0.00549316 -0.629592  0.272559  0.727548
+      4   qp02zv    1       0:0  0.006886   0   0     0        0.0    1 -5.46295  0.00274658  90.6976  0.00549316 -0.625915  0.270968  0.731305
+
+                                                                ...
+
+4206317   qp0dj1   61     23:45  0.040727  23  45  1425   0.989583   5  -5.2652  0.00274658  90.9283  0.00549316 -0.516798  0.0928899  0.851053
+4206318   qp0dj4   61     23:45  0.003259  23  45  1425   0.989583   5  -5.2597  0.00274658  90.9283  0.00549316 -0.512189  0.0920615  0.853925
+4206319   qp0dj5   61     23:45  0.058156  23  45  1425   0.989583   5 -5.25421  0.00274658  90.9283  0.00549316 -0.507565  0.0912302   0.85677
+4206320   qp0djh   61     23:45  0.011935  23  45  1425   0.989583   5 -5.24872  0.00274658  90.9283  0.00549316 -0.502925  0.0903963   0.85959
+4206321   qp0djk   61     23:45  0.003414  23  45  1425   0.989583   5 -5.24872  0.00274658  90.9393  0.00549316 -0.503887  0.0848656   0.85959
+```
+
+As for their error (`lat_err` and `long_err`), I have no idea what to do with them. We could just push all of these features to a neural network and let it figure out which features are important and which are not. However, I had hard time training a model with just 6 features, even on a TPU. It is possible that there's a memory leak with Keras' [fit_generator](https://www.google.com/search?q=keras+fit_generator+memory+leak) method. 
+
+This challenge allows us to look-back up to 14 days or at least `(14 * 24 * 60) / 15 = 1344` intervals. This is the lower limit, `past-steps >= 1344`, since each interval can have multiple series from different `geohash6` locations, as long as it's within the 14 days window. However, for this model, even with just 6 features below, I was only able to train `past-steps = 100` anything above that resulted in out-of-memory error, even on `BASIC_TPU`. This could be due to the exponential nature of the sliding window method I used to generate inputs to the model.
+
+The below is the final features that I used to generate inputs for this model with sliding window method described above.
+
+```
+         dow  mins_norm         x         y         z    demand
+      0    1        0.0 -0.633821  0.282699  0.719967  0.022396
+      1    1        0.0 -0.612472  0.281284  0.738754  0.042046
+      2    1        0.0   -0.6229  0.277828  0.731305  0.001112
+      3    1        0.0 -0.629592  0.272559  0.727548  0.001831
+      4    1        0.0 -0.625915  0.270968  0.731305  0.006886
+
+                                ...
+
+4206317    5   0.989583 -0.516798  0.0928899  0.851053  0.040727
+4206318    5   0.989583 -0.512189  0.0920615  0.853925  0.003259
+4206319    5   0.989583 -0.507565  0.0912302   0.85677  0.058156
+4206320    5   0.989583 -0.502925  0.0903963   0.85959  0.011935
+4206321    5   0.989583 -0.503887  0.0848656   0.85959  0.003414
+```
+
 ## Architecture
 I haven't really spend much time on experiementing with different architectures. The current one looks like this
 ```python
@@ -90,7 +133,7 @@ python -m trainer.slidingwindow.predict --past-steps 100 --batch-size 10000 --mo
 ```
 
 # Model 2: Encoder Decoder with teacher forcing (WIP)
-Attempting to try the encoder decoder model with teacher forcing described in [Keras blog](https://blog.keras.io/a-ten-minute-introduction-to-sequence-to-sequence-learning-in-keras.html) with this problem.
+Attempting to implement the encoder decoder model with teacher forcing described in [Keras blog](https://blog.keras.io/a-ten-minute-introduction-to-sequence-to-sequence-learning-in-keras.html) by transforming the dataset into a continous series as described below.
 
 ```
         geohash6  day  timestamp    demand  h  m  dow
@@ -136,7 +179,7 @@ python -m trainer.encoderdecoder.data_utils --input training_dev.csv --output tr
 
 DeepMind's [Wavenet](https://deepmind.com/blog/wavenet-generative-model-raw-audio/) architecure uses CNNs with *dilated causal convolution layer*  to learn temporal patterns as well as long-term dependencies across a large timesteps, better than recurrent neural networks like LSTM. We can capture years worth of context with less than 10 dilated convolutions! It's a CNN, so it's faster than RNNs too.
 
-I'm planning to make an attempt at implmenting this.
+I'm planning to make an attempt at implementing this.
 
 ![](https://storage.googleapis.com/deepmind-live-cms-alt/documents/BlogPost-Fig2-Anim-160908-r01.gif)
 
