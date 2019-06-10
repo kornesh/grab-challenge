@@ -1,5 +1,9 @@
 # Grab AI Challenge: Traffic Management
 
+Each of the `geohash6` can be considered a separate discontinous time series. Traditional time series method like ARIMA can make good prediction for series specific problems but it doesn't scale well to predict thousands of series as it fails to capture the general patterns among those series.
+
+I'll be taking minimalistic approach to feature engineering since I'll be only considering neural networks which are capable of learning features automatically.
+
 # Model 1: Sliding Window with LSTM (Final solution)
 ```
        x1     x2      y
@@ -43,7 +47,7 @@ I haven't really spend much time on experiementing with different architectures.
 ```
 
 ## Hyperparameter tunning
-I have not performed manual hyperparameter tunning as I will be doing it using [ML Engine](https://cloud.google.com/ml-engine/docs/tensorflow/using-hyperparameter-tuning) once I'm satisfied with the current model.
+I have not performed manual hyperparameter tuning as I will be doing it using [ML Engine](https://cloud.google.com/ml-engine/docs/tensorflow/using-hyperparameter-tuning) once I'm satisfied with the current model.
 
 ## Training on ML Engine using TPU
 My attempts to train this model with `past-steps` more than 100 have always resulted in OOM error, even on `BASIC_TPU`. So the current model will be only looking at past 100 records to predict next 5 `future-steps`.
@@ -85,10 +89,50 @@ wget -O model.h5 https://storage.googleapis.com/sr-semantic-search/jobs/timeseri
 python -m trainer.slidingwindow.predict --past-steps 100 --batch-size 10000 --model model.h5 --data evaluation.csv
 ```
 
-# Model 2: Encoder Decoder with teacher forcing(WIP)
+# Model 2: Encoder Decoder with teacher forcing (WIP)
 Attempting to try the encoder decoder model with teacher forcing described in [Keras blog](https://blog.keras.io/a-ten-minute-introduction-to-sequence-to-sequence-learning-in-keras.html) with this problem.
 
-# Model 3: Wavenet (To-do)
+```
+        geohash6  day  timestamp    demand  h  m  dow
+      1   qp03q8    1          0  0.021055  0  0    1
+      2   qp03wn    1          0  0.032721  0  0    1
+      3   qp03x5    1          0  0.157956  0  0    1
+      4   qp03xt    1          0  0.120760  0  0    1
+      5   qp03yb    1          0  0.244790  0  0    1
+
+                        ...
+
+4206317   qp09e8   61      87825  0.000591  23  45    5
+4206318   qp09eb   61      87825  0.014968  23  45    5
+4206319   qp09g1   61      87825  0.053489  23  45    5
+4206320   qp09g7   61      87825  0.028502  23  45    5
+4206321   qp09u8   61      87825  0.027069  23  45    5
+```
+
+In this model we compute `timestamp = ((day - 1) * 24 * 60) + (h * 60) + m` and transform the data above into `timestamp` vs `geohash6` table as shown below. Note that we're considering each of `geohash6` as separate series without resolving/calculating it's latitude and longitude. Also note that we're using the value `0.0000001` when there is no data available, to prevent vanishing/exploding gradients.
+```
+           0         15        30       ...        87795     87810     87825
+qp03q8 0.0210552 0.0000001 0.0000001    ...    0.0000001 0.0000001 0.0000001
+qp03wn 0.0327211 0.0000001 0.0000001    ...    0.0000001 0.0000001 0.0000001
+qp03x5 0.1579564 0.0000001 0.0000001    ...    0.0000001 0.0000001 0.0000001
+qp03xt 0.1207595 0.0000001 0.0000001    ...    0.0000001 0.0000001 0.0000001
+qp03yb 0.2447899 0.0000001 0.0000001    ...    0.0000001 0.0000001 0.0000001
+
+                                        ...
+
+qp0djv 0.0000001 0.0000001 0.0000001    ...    0.0000001 0.0000001 0.0000001
+qp08g7 0.0000001 0.0000001 0.0000001    ...    0.0000001 0.0000001 0.0000001
+qp0d5q 0.0000001 0.0000001 0.0000001    ...    0.0000001 0.0000001 0.0000001
+qp09cz 0.0000001 0.0000001 0.0000001    ...    0.0000001 0.0000001 0.0000001
+qp08uj 0.0000001 0.0000001 0.0000001    ...    0.0000001 0.0000001 0.0000001
+```
+## Data transformation
+This transformation is pretty slow as it is looping through entire dataset one by one. I'm sure there are better ways to achieve this but since we only have to do it once, I'm not worried about the performance. We transform the data and save it as a `.hdf5` file which can be loaded fast into memory.
+```bash
+python -m trainer.encoderdecoder.data_utils --input training_dev.csv --output training_dev.h5
+```
+
+# Model 3: WaveNet (To-do)
 
 DeepMind's [Wavenet](https://deepmind.com/blog/wavenet-generative-model-raw-audio/) architecure uses CNNs with *dilated causal convolution layer*  to learn temporal patterns as well as long-term dependencies across a large timesteps, better than recurrent neural networks like LSTM. We can capture years worth of context with less than 10 dilated convolutions! It's a CNN, so it's faster than RNNs too.
 
