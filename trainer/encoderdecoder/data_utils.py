@@ -38,6 +38,9 @@ if __name__ == '__main__':
 
     print("timestamp_min", timestamp_min, "timestamp_max", timestamp_max, "matrix_width", matrix_width)
 
+    pd.options.display.max_columns = 9
+    pd.options.display.float_format = '{:.7f}'.format
+
     #np.set_printoptions(precision=7, suppress=True)
     #matrix = np.zeros((5847, 1329))
     #matrix = np.random.normal(0, 0.0000001, (5000, 1000))
@@ -53,4 +56,5 @@ if __name__ == '__main__':
     d = pd.DataFrame.from_dict(geomaps, orient='index')
     d.columns = [i for i in range(timestamp_min, timestamp_max + 1, 15)]
     print(d.head())
+    print(d.tail())
     d.to_hdf(args.output, key='df', mode='w')
