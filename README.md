@@ -36,29 +36,39 @@ The basic idea behind this model is to convert the matrix above to the one below
 [ 30.  35.  65.]
 [ 40.  45.  85.]]   =>   [105. 125. 145.]
 ```
-I added a few additonal features like `mins = (h * 60) + m` and it's normalized version `mins_norm = mins / (60 * 24)`. After extracting latitude and longitude from `geohash6`, we can convert them into [Cartesian coordinates](https://en.wikipedia.org/wiki/Geographic_coordinate_conversion#From_geodetic_to_ECEF_coordinates). It turns out these 2 features actually represent a three dimensional space. Unlike in latitude and longitude, close points in these 3 dimensions are also close in reality. So this standardizes the features nicely.
+I added a few additonal features like `mins = (h * 60) + m` and it's normalized version `mins_norm = mins / (60 * 24)`. After extracting latitude and longitude from `geohash6`, we can convert them into [Cartesian coordinates](https://en.wikipedia.org/wiki/Geographic_coordinate_conversion#From_geodetic_to_ECEF_coordinates). It turns out these 2 features actually represent a three dimensional space. Unlike in latitude and longitude, close points in these 3 dimensions are also close in reality. So this standardizes the features nicely. As for their error (`lat_err` and `long_err`), I have no idea what to do with them lol. The last 14 days of the 61 days were used as testing data. Both training and testing dataset were then sorted by [`geohash6`, `day`, `mins`], particularly in this order, to preserve the continuity of the time series of each location.
 ```
-        geohash6  day timestamp    demand   h   m  mins  mins_norm  dow      lat     lat_err     long    long_err         x         y         z
-      0   qp02zd    1       0:0  0.022396   0   0     0        0.0    1 -5.47943  0.00274658  90.6866  0.00549316 -0.633821  0.282699  0.719967
-      1   qp02zr    1       0:0  0.042046   0   0     0        0.0    1 -5.45197  0.00274658  90.6757  0.00549316 -0.612472  0.281284  0.738754
-      2   qp02zt    1       0:0  0.001112   0   0     0        0.0    1 -5.46295  0.00274658  90.6866  0.00549316   -0.6229  0.277828  0.731305
-      3   qp02zu    1       0:0  0.001831   0   0     0        0.0    1 -5.46844  0.00274658  90.6976  0.00549316 -0.629592  0.272559  0.727548
-      4   qp02zv    1       0:0  0.006886   0   0     0        0.0    1 -5.46295  0.00274658  90.6976  0.00549316 -0.625915  0.270968  0.731305
-
-                                                                ...
-
-4206317   qp0dj1   61     23:45  0.040727  23  45  1425   0.989583   5  -5.2652  0.00274658  90.9283  0.00549316 -0.516798  0.0928899  0.851053
-4206318   qp0dj4   61     23:45  0.003259  23  45  1425   0.989583   5  -5.2597  0.00274658  90.9283  0.00549316 -0.512189  0.0920615  0.853925
-4206319   qp0dj5   61     23:45  0.058156  23  45  1425   0.989583   5 -5.25421  0.00274658  90.9283  0.00549316 -0.507565  0.0912302   0.85677
-4206320   qp0djh   61     23:45  0.011935  23  45  1425   0.989583   5 -5.24872  0.00274658  90.9283  0.00549316 -0.502925  0.0903963   0.85959
-4206321   qp0djk   61     23:45  0.003414  23  45  1425   0.989583   5 -5.24872  0.00274658  90.9393  0.00549316 -0.503887  0.0848656   0.85959
+Training data (3145113, 16)
+      geohash6  day timestamp  demand  h   m  mins  mins_norm  dow      lat     lat_err     long    long_err         x         y         z
+      qp02yc    1      2:45  0.020592  2  45   165   0.114583    1 -5.48492  0.00274658  90.6537  0.00549316 -0.627709  0.305156  0.716143
+      qp02yc    1       3:0  0.010292  3   0   180   0.125000    1 -5.48492  0.00274658  90.6537  0.00549316 -0.627709  0.305156  0.716143
+      qp02yc    1       4:0  0.006676  4   0   240   0.166667    1 -5.48492  0.00274658  90.6537  0.00549316 -0.627709  0.305156  0.716143
+      qp02yc    1      4:30  0.003822  4  30   270   0.187500    1 -5.48492  0.00274658  90.6537  0.00549316 -0.627709  0.305156  0.716143
+      qp02yc    1      6:45  0.011131  6  45   405   0.281250    1 -5.48492  0.00274658  90.6537  0.00549316 -0.627709  0.305156  0.716143
+                                                                      ...
+      qp0dnn   43      8:15  0.003903   8  15   495   0.343750    1 -5.23773  0.00274658  90.9723  0.00549316 -0.497021  0.0669501  0.865152
+      qp0dnn   43      8:45  0.002382   8  45   525   0.364583    1 -5.23773  0.00274658  90.9723  0.00549316 -0.497021  0.0669501  0.865152
+      qp0dnn   43       9:0  0.004762   9   0   540   0.375000    1 -5.23773  0.00274658  90.9723  0.00549316 -0.497021  0.0669501  0.865152
+      qp0dnn   43      9:15  0.005888   9  15   555   0.385417    1 -5.23773  0.00274658  90.9723  0.00549316 -0.497021  0.0669501  0.865152
+      qp0dnn   46     15:15  0.001671  15  15   915   0.635417    4 -5.23773  0.00274658  90.9723  0.00549316 -0.497021  0.0669501  0.865152
+Testing data (1061208, 16)
+      geohash6  day timestamp  demand  h   m  mins  mins_norm  dow      lat     lat_err     long    long_err         x         y         z
+      qp02yc   47       3:0  0.014581  3   0   180   0.125000    5 -5.48492  0.00274658  90.6537  0.00549316 -0.627709  0.305156  0.716143
+      qp02yc   47      3:15  0.006749  3  15   195   0.135417    5 -5.48492  0.00274658  90.6537  0.00549316 -0.627709  0.305156  0.716143
+      qp02yc   47      4:15  0.009923  4  15   255   0.177083    5 -5.48492  0.00274658  90.6537  0.00549316 -0.627709  0.305156  0.716143
+      qp02yc   47      4:30  0.021440  4  30   270   0.187500    5 -5.48492  0.00274658  90.6537  0.00549316 -0.627709  0.305156  0.716143
+      qp02yc   47      4:45  0.007095  4  45   285   0.197917    5 -5.48492  0.00274658  90.6537  0.00549316 -0.627709  0.305156  0.716143
+                                                                      ...
+      qp0dnn   60      1:30  0.003741   1  30    90   0.062500    4 -5.23773  0.00274658  90.9723  0.00549316 -0.497021  0.0669501  0.865152
+      qp0dnn   60     10:45  0.001280  10  45   645   0.447917    4 -5.23773  0.00274658  90.9723  0.00549316 -0.497021  0.0669501  0.865152
+      qp0dnn   60      11:0  0.045466  11   0   660   0.458333    4 -5.23773  0.00274658  90.9723  0.00549316 -0.497021  0.0669501  0.865152
+      qp0dnn   60     11:15  0.029285  11  15   675   0.468750    4 -5.23773  0.00274658  90.9723  0.00549316 -0.497021  0.0669501  0.865152
+      qp0dnn   61       9:0  0.000896   9   0   540   0.375000    5 -5.23773  0.00274658  90.9723  0.00549316 -0.497021  0.0669501  0.865152
 ```
 
-As for their error (`lat_err` and `long_err`), I have no idea what to do with them. We could just push all of these features to a neural network and let it figure out which features are important and which are not. However, I had hard time training a model with just 6 features, even on a TPU. It is possible that there's a memory leak with Keras' [fit_generator](https://www.google.com/search?q=keras+fit_generator+memory+leak) method. 
+We could just push all of these features to a neural network and let it figure out which features are important and which are not. However, I had hard time training a model with just 6 features, even on a TPU. It is possible that there's a memory leak with Keras' [fit_generator](https://www.google.com/search?q=keras+fit_generator+memory+leak) method. This could be also caused by the exponential nature of the sliding window method I used to generate inputs to the model.
 
-This challenge allows us to look-back up to 14 days or at least `(14 * 24 * 60) / 15 = 1344` intervals. This is the lower limit, `past-steps >= 1344`, since each interval can have multiple series from different `geohash6` locations, as long as it's within the 14 days window. However, for this model, even with just 6 features below, I was only able to train `past-steps = 100` anything above that resulted in out-of-memory error, even on `BASIC_TPU`. This could be due to the exponential nature of the sliding window method I used to generate inputs to the model.
-
-The below is the final features that I used to generate inputs for this model with sliding window method described above.
+The below is the final features that I selected to generate inputs using the sliding window method described earlier.
 
 ```
          dow  mins_norm         x         y         z    demand
@@ -76,6 +86,8 @@ The below is the final features that I used to generate inputs for this model wi
 4206320    5   0.989583 -0.502925  0.0903963   0.85959  0.011935
 4206321    5   0.989583 -0.503887  0.0848656   0.85959  0.003414
 ```
+
+This challenge allows us to look-back up to 14 days or at least `(14 * 24 * 60) / 15 = 1344` intervals. This is the lower limit, `past-steps >= 1344`, since each interval can have multiple series from different `geohash6` locations, as long as it's within the 14 days window. However, for this model, even with just 6 features below, I was only able to train `past-steps = 100` anything above that resulted in out-of-memory error, even on `BASIC_TPU`. 
 
 ## Architecture
 I haven't really spend much time on experiementing with different architectures. The current one looks like this
