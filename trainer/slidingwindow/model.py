@@ -10,7 +10,7 @@ from sklearn.metrics import mean_squared_error
 from keras import Sequential
 from keras.layers import LSTM, Dense, Lambda, Dropout
 from trainer.utils import copy_file_to_gcs, to_savedmodel
-from trainer.slidingwindow.data_utils import timeseries, keras_timeseries_generator, get_data
+from trainer.slidingwindow.data_utils import timeseries, keras_timeseries_generator, get_data, train_test_split
 import argparse
 import keras.backend as K
 from keras.callbacks import ModelCheckpoint, EarlyStopping
@@ -85,14 +85,7 @@ if __name__ == '__main__':
     except:
         pass
 
-    X, y = get_data(args.train_file)
-
-    split_n = int(0.8*len(y))
-    train_X = X.iloc[:split_n, :].values
-    train_y = y.iloc[:split_n, :].values
-
-    test_X = X.iloc[split_n:, :].values
-    test_y = y.iloc[split_n:, :].values
+    train_X, train_y, test_X, test_y = train_test_split(get_data(args.train_file))
 
     print("Train shape", train_X.shape, train_y.shape)
     print("Test shape", test_X.shape, test_y.shape)

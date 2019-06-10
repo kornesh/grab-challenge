@@ -5,7 +5,7 @@ import sys
 import argparse
 from keras.models import load_model
 from trainer.slidingwindow.model import sMAPE, root_mean_squared_error
-from trainer.slidingwindow.data_utils import timeseries, get_data
+from trainer.slidingwindow.data_utils import timeseries, get_data, postprocess_data
 import keras.losses
 
 keras.losses.custom_loss = sMAPE
@@ -37,8 +37,8 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-X, y = get_data(args.data)
-Xs, ys = timeseries(X.values, y.values, args.past_steps, args.future_steps)
+X, y = postprocess_data(get_data(args.data))
+Xs, ys = timeseries(X, y, args.past_steps, args.future_steps)
 
 model = load_model(args.model, custom_objects={'sMAPE': sMAPE, 'root_mean_squared_error': root_mean_squared_error})
 

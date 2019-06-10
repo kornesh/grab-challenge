@@ -128,7 +128,7 @@ gcloud ml-engine local train \
 ## Prediction / evaluation
 ```bash
 # head -n 100000 training.csv > evaluation.csv
-wget -O model.h5 https://storage.googleapis.com/sr-semantic-search/jobs/timeseries_14/model-epoch01-val_loss43.72372.h5
+wget -O model.h5 https://storage.googleapis.com/sr-semantic-search/jobs/timeseries_17/model-epoch02-val_loss24.60540.h5
 python -m trainer.slidingwindow.predict --past-steps 100 --batch-size 10000 --model model.h5 --data evaluation.csv
 ```
 

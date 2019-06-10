@@ -143,11 +143,28 @@ def get_data(file_path):
     df = df.merge(geohashes_df.drop(
         columns=['count']), on='geohash6', how='inner')
 
-    dfx = df.sort_values(by=['day', 'mins', 'geohash6'], ascending=True)
-    X = dfx[['dow', 'mins_norm', 'x', 'y', 'z', 'demand']]
-    y = dfx[['demand']]
+    return df
 
-    return X, y
+def train_test_split(df, test_days=14):
+    train = df.loc[df['day'] < (df['day'].max() - test_days)]
+    test = df.loc[df['day'] >= (df['day'].max() - test_days)]
+
+    train_X, train_y = postprocess_data(train)
+    test_X, test_y = postprocess_data(test)
+
+    return train_X, train_y, test_X, test_y
+
+def postprocess_data(df):
+    df = df.sort_values(by=['geohash6', 'day', 'mins'], ascending=True)
+
+    print(df.shape)
+    print(df.head())
+    print(df.tail())
+
+    X = df[['dow', 'mins_norm', 'x', 'y', 'z', 'demand']]
+    y = df[['demand']]
+
+    return X.values, y.values
 
 if __name__ == "__main__":
     # @TODO(kornesh): Write proper tests!
